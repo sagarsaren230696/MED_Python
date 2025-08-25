@@ -64,7 +64,7 @@ F1 = F
 D = 0.171
 X_F = 0.042
 
-T_E = 78 + 273.15
+# T_E = 78 + 273.15
 T_F = 333.15 #66.81 + 273.15
 T_S = 353.15
 
@@ -80,44 +80,33 @@ sol = fsolve(Effect_massBalance_1,initial_guess)
 
 B, X_B = sol
 
-h_D = CP.PropsSI('H','T',T_E,'Q',1,'Water')
 hfg_S = CP.PropsSI('H','T',T_S,'Q',1,'Water') - CP.PropsSI('H','T',T_S,'Q',0,'Water')
 
-P_E = CP.PropsSI('P','T',T_E,'Q',1,'Water') / 1e6
-print("Effect pressure is ", P_E)
+# print("Effect pressure is ", P_E)
 
-h_F = h_sw(T_F,P_E,X_F)
-h_B = h_sw(T_E,P_E,X_B)
+U_E = (1939.1 + 1.40562 * (T_S - 273.15) - 0.02075255 * (T_S - 273.15)**2 + 0.0023186 * (T_S - 273.15)**3)
+A_E = 90
 
 def Effect_energyBalance_1(x):
-    m_s = x
-    eq = m_s * hfg_S + F * h_F - D * h_D - B * h_B
-    return eq
+    m_s,T_E = x
+    P_E = CP.PropsSI('P','T',T_E,'Q',1,'Water') / 1e6
+    h_D = CP.PropsSI('H','T',T_E,'Q',1,'Water')
+    h_F = h_sw(T_F,P_E,X_F)
+    h_B = h_sw(T_E,P_E,X_B)
+    eq1 = m_s * hfg_S + F * h_F - D * h_D - B * h_B
+    eq2 = m_s*hfg_S - A_E * U_E * (T_S - T_E)
+    return [eq1, eq2]
 
-initial_guess_energy = 2.0
+initial_guess_energy = (2.0,78.0+273.15)
 
 sol_energy = fsolve(Effect_energyBalance_1,initial_guess_energy)
 
-m_s, = sol_energy
+m_s,T_E = sol_energy
 
 print("Mass flow rate of steam is ", m_s, " kg/s" )
+print("T_E = ",T_E-273.15)
 m_s_1 = m_s 
-
-## Area calculation 
-U_E = (1939.1 + 1.40562 * (T_S - 273.15) - 0.02075255 * (T_S - 273.15)**2 + 0.0023186 * (T_S - 273.15)**3)
-# print("Heat transfer coefficient: ",U_E)
-
-def Effect_area(x):
-    A = x
-    eq = m_s*hfg_S - A * U_E * (T_S - T_E)
-    return eq
-
-initial_guess_area = 200
-
-sol_area = fsolve(Effect_area, initial_guess_area)
-
-A_E, = sol_area
-print("Area of Effect 1 is ", A_E, "m2")
+P_E = CP.PropsSI('P','T',T_E,'Q',1,'Water') / 1e6
 
 #######################################################
 ######### Effect 2 onwards ----------------------------
