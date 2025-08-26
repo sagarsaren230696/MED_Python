@@ -59,7 +59,7 @@ def BPE_sw(T,X):
     BPE = A*X**2+B*X
     return BPE
     
-def MED(args,N_effects,plotShow=False,printData=False):
+def MED(args,N_effects,plotShow=False,printData=False,addFeedHeaters=False):
     """
     args: F, D, A_E, T_S, T_F
     """
@@ -107,7 +107,7 @@ def MED(args,N_effects,plotShow=False,printData=False):
         m_s,T_E = x
         P_E = CP.PropsSI('P','T',T_E,'Q',1,'Water') / 1e6
         h_D = CP.PropsSI('H','T',T_E,'Q',1,'Water')
-        h_F = h_sw(T_F,P_E,X_F)
+        h_F = h_sw(T_F,0.101,X_F)
         h_B = h_sw(T_E,P_E,X_B)
         eq1 = m_s * hfg_S + F * h_F - D * h_D - B * h_B
         eq2 = m_s*hfg_S - A_E * U_E * (T_S - T_E)
@@ -134,6 +134,8 @@ def MED(args,N_effects,plotShow=False,printData=False):
     # Heat released from steam in Effect 1
     Q_E_1 = m_s_1 * hfg_S
 
+    T_sw_fh_out = T_F 
+    T_sw_arr = [T_F]
 
     #######################################################
     ######### Effect 2 onwards ----------------------------
@@ -143,9 +145,12 @@ def MED(args,N_effects,plotShow=False,printData=False):
     T_E_arr = [T_E]         # initializing Effect temperature array across Effects
     T_S_arr = [T_S]         # initializing Steam temperature array across Effects
     F_arr = [F]             # initializing Feed flow rate array across Effects
+    D_arr = [D]             # initializing Feed flow rate array across Effects
     P_E_arr = [P_E]         # initializing Effect pressure array across Effects
     m_s_arr = [m_s]         # initializing mass flow rate of steam array across Effects
     Q_E_arr = [Q_E_1]       # initializing heat transferred amount array across Effects
+    T_F_arr = [T_F]         # initializing feed temperature array across Effects
+    X_F_arr = [X_F]         # initializing feed temperature array across Effects
 
     if printData:
         print(f"Effect 1")
@@ -161,6 +166,7 @@ def MED(args,N_effects,plotShow=False,printData=False):
 
     # Looping over 2nd to Nth Effect
     for N_E in range(2,N_effects+1): 
+        # print("N_E ==========> ",N_E)
         F = abs(B)                      # Brine outlet of previous effect is the feed to next effect
         m_s = D                         # Distillate flow rate is the steam mass flow rate in next effect
         T_S = T_E - BPE_sw(T_E, X_B)    # Decreasing in next Effect's steam temperature by the BPE temperature calculated at the previous effect temperature and brine salinity
@@ -194,11 +200,14 @@ def MED(args,N_effects,plotShow=False,printData=False):
         D, B, X_B, T_E = sol_effect_2
         net_distillate += m_s               # Adding the condensed m_s to the net distillate amount
         T_E_arr.append(T_E)                 # Appending the current Effect temperature to the T_E array
+        T_F_arr.append(T_F)                 # Appending the current Feed temperature to the T_E array
         T_S_arr.append(T_S)                 # Appending the current steam temperature to the T_S array
         F_arr.append(F)                     # Appending the feed water flow rate to the F array
+        D_arr.append(D)                     # Appending the feed water flow rate to the F array
         P_E_arr.append(CP.PropsSI('P','T',T_E,'Q',1,'Water')/1e6) # Appending the Effect pressure to the P_E array
         m_s_arr.append(m_s)                 # Appending the steam mass flow rate to the m_s array
         Q_E_arr.append(m_s * hfg_S)         # Appending the energy transferred value to the Q_E array 
+        X_F_arr.append(X_F)         # Appending the energy transferred value to the Q_E array 
 
         if printData:
             print(f"Effect {N_E}")
@@ -214,13 +223,16 @@ def MED(args,N_effects,plotShow=False,printData=False):
     
     ### Add condenser
     T_sw_in = 25 + 273.15                   # Condenser seawater inlet temperature 
-    T_sw_out = T_sw_in + 40 # K             # Condenser seawater outlet temperature
+    # T_sw_out = T_sw_in + 40 # K             # Condenser seawater outlet temperature
     T_S = T_E - BPE_sw(T_E, X_B)            # Steam temperature reduced by the BPE 
     hfg_S = CP.PropsSI('H','T',T_E,'Q',1,'Water') - CP.PropsSI('H','T',T_S,'Q',0,'Water')
     h_sw_in = h_sw(T_sw_in,0.101,X_F_1)     # Enthalpy value of seawater inlet
-    h_sw_out = h_sw(T_sw_out,0.101,X_F_1)   # Enthalpy value of seawater outlet
+    h_sw_out = h_sw(T_F,0.101,X_F_1)   # Enthalpy value of seawater outlet
     # print(D * hfg_S  , (h_sw_out - h_sw_in))
     F_sw = D * hfg_S / (h_sw_out - h_sw_in) # Required seawater feed flow rate for complete condensation of distillate 
+    
+    # print("F_1 = ",F_arr[0]," F_sw = ",F_sw)
+    
     
     # print("Check final mass balance")
     # print("B_n + D_n + total distillate == F + m_s ---> ", (F1 + m_s_1 - B - D - net_distillate))
@@ -237,37 +249,117 @@ def MED(args,N_effects,plotShow=False,printData=False):
 
     PR = sum(Q_E_arr[1:])/Q_E_1                # Performance ratio
     
-    return [Productivity,PR,F_sw]           
+    return [Productivity,PR,F_sw,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr]           
 
-# Productivity,PR,F_sw = MED([2.0,0.171,90,353.15,333.15],8)
+Productivity,PR,F_sw,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr = MED([2.0,0.171,90,353.15,333.15],8)
 # print(Productivity,PR,F_sw)
 
-# for _ in range(20):
-#     Productivity,PR,F_sw = MED([F_sw,0.171,90,353.15,333.15],8)
-#     print(Productivity,PR,F_sw)
+for _ in range(20):
+    Productivity,PR,F_sw,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr = MED([F_sw,0.171,90,353.15,333.15],8)
+    # print(Productivity,PR,F_sw)
 
+
+def addFeedHeaters(N_effects,F_sw,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr):
+    def FH_energyBalance_(x):
+        T_sw_fh_in, T_F_fh_out = x
+        h_F_fh_in = h_sw(T_E_arr[0],P_E_arr[0],X_F_arr[1])
+        h_F_fh_out = h_sw(T_F_fh_out,P_E_arr[0],X_F_arr[1])
+        h_sw_fh_in = h_sw(T_sw_fh_in,0.101,X_F_arr[0])
+        h_sw_fh_out = h_sw(T_F_arr[0],0.101,X_F_arr[0])
+        eq1 = F_arr[0]*(h_F_fh_in-h_F_fh_out) - F_sw*(h_sw_fh_out-h_sw_fh_in)
+        eq2 = T_sw_fh_in - T_F_fh_out + 5
+        return [eq1,eq2]
+    
+    fh_guessValues = [T_F_arr[0]-5,T_F_arr[1]]
+    sol_FH = fsolve(FH_energyBalance_,fh_guessValues)
+    T_sw_fh_in, T_F_fh_out = sol_FH
+    print("Feed heater temperatures")
+    print(f"{T_F_arr[0]:.2f} <------------- {T_sw_fh_in:.2f}")
+    print(f"{T_E_arr[0]:.2f} -------------> {T_F_fh_out:.2f}")
+
+
+    # Looping over 2nd to Nth Effect
+    for N_E in range(2,N_effects+1): 
+        # print("N_E ==========> ",N_E)
+        F = abs(F_arr[N_E-1])                      # Brine outlet of previous effect is the feed to next effect
+        m_s = D_arr[N_E-1]                         # Distillate flow rate is the steam mass flow rate in next effect
+        T_S = T_E_arr[N_E-1] - BPE_sw(T_E_arr[N_E-1], X_F_arr[N_E-1])    # Decreasing in next Effect's steam temperature by the BPE temperature calculated at the previous effect temperature and brine salinity
+        T_F = T_F_fh_out                       # Feed temperature in next Effect is the temperature of the previous Effect
+        X_F = X_F_arr[N_E-1]                       # Feed salinity of the next Effect is the brine salinity of the previous Effect
+
+        # h_fg value at the temperature T_S
+        hfg_S = CP.PropsSI('H','T',T_E_arr[N_E-1],'Q',1,'Water') - CP.PropsSI('H','T',T_S,'Q',0,'Water')
+
+        # Mass and energy balance equations
+        def Effect_mass_energyBalance(x):
+            D, B, X_B, T_E = x
+            P_E = CP.PropsSI('P','T',T_E,'Q',1,'Water') / 1e6
+            h_F = h_sw(T_F,P_E,X_F)
+            h_B = h_sw(T_E,P_E,X_B)
+            h_D = CP.PropsSI('H','T',T_E,'Q',1,'Water')
+            U_E = (1939.1 + 1.40562 * (T_S - 273.15) - 0.02075255 * (T_S - 273.15)**2 + 0.0023186 * (T_S - 273.15)**3)
+            eq1 = F - (B + D)
+            eq2 = F*X_F - B*X_B
+            eq3 = m_s * hfg_S + F * h_F - D * h_D - B * h_B
+            eq4 = m_s * hfg_S - U_E * 90 * (T_S - T_E)
+            return [eq1,eq2,eq3,eq4]
+
+        # Initial guesses for the mass and energy balance equations
+        initial_guess_effect_2 = [D_arr[N_E-1], F_arr[N_E-1], X_F_arr[N_E-1], T_E_arr[N_E-1]]
+
+        # Solving the mass and energy balance equations
+        sol_effect_2 = fsolve(Effect_mass_energyBalance,initial_guess_effect_2)
+
+        # Extracting the results for distillate flow rate, brine flow rate, brine salinity, and Effect temperature
+        D, B, X_B, T_E = sol_effect_2
+        if N_E < N_effects-1:
+            # net_distillate += m_s               # Adding the condensed m_s to the net distillate amount
+            T_E_arr[N_E] = T_E                 # Appending the current Effect temperature to the T_E array
+            T_F_arr[N_E] = T_F                 # Appending the current Feed temperature to the T_E array
+            F_arr[N_E] = B                     # Appending the feed water flow rate to the F array
+            P_E_arr[N_E] = CP.PropsSI('P','T',T_E,'Q',1,'Water')/1e6 # Appending the Effect pressure to the P_E array
+            X_F_arr[N_E] = X_F         # Appending the energy transferred value to the Q_E array 
+    
+    ### Add condenser
+    T_sw_in = 25 + 273.15                   # Condenser seawater inlet temperature 
+    # T_sw_out = T_sw_in + 40 # K             # Condenser seawater outlet temperature
+    T_S = T_E - BPE_sw(T_E, X_B)            # Steam temperature reduced by the BPE 
+    hfg_S = CP.PropsSI('H','T',T_E,'Q',1,'Water') - CP.PropsSI('H','T',T_S,'Q',0,'Water')
+    h_sw_in = h_sw(T_sw_in,0.101,X_F_arr[0])     # Enthalpy value of seawater inlet
+    h_sw_out = h_sw(T_sw_fh_in,0.101,X_F_arr[0])   # Enthalpy value of seawater outlet
+    # print(D * hfg_S  , (h_sw_out - h_sw_in))
+    F_sw_new = D * hfg_S / (h_sw_out - h_sw_in) # Required seawater feed flow rate for complete condensation of distillate 
+    # print(F_sw,F_sw_new)
+    F_arr[0] = F_sw_new
+    return [F_sw_new,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr]
+
+
+F_sw_new,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr = addFeedHeaters(8,F_sw,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr)
+for _ in range(20):
+    F_sw_new,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr = addFeedHeaters(8,F_sw_new,T_E_arr,P_E_arr,X_F_arr,T_F_arr,F_arr,D_arr)
+    print(F_arr[0],F_sw_new)
 # Productivity,PR,F_sw = MED([F_sw,0.171,90,353.15,333.15],8,plotShow=True)
 # print(Productivity,PR,F_sw)
 
-def obj(x,N_effects):
-    prod,pr,f_sw = MED(x,N_effects=N_effects,plotShow=False)
-    return -pr
+# def obj(x,N_effects):
+#     prod,pr,f_sw = MED(x,N_effects=N_effects,plotShow=False)
+#     return -pr
 
-x0 = [2.0,0.171,90,353.15,333.15]
+# x0 = [2.0,0.171,90,353.15,333.15]
 
-prod_arr = []
-for n in range(2,9):
-    res = minimize(obj,x0,args=(n,),method="nelder-mead", options={'xatol': 1e-8, 'disp': True},bounds=((2.0,3.0),(0.12,0.24),(60,100),(343.15,363.15),(323.15,343.15)))
+# prod_arr = []
+# for n in range(2,9):
+#     res = minimize(obj,x0,args=(n,),method="nelder-mead", options={'xatol': 1e-8, 'disp': True},bounds=((2.0,3.0),(0.12,0.24),(60,100),(343.15,363.15),(323.15,343.15)))
 
-    print("nelder-mead : ",res.x)
+#     print("nelder-mead : ",res.x)
 
-    prod_arr.append(MED(res.x,n)[1])
+#     prod_arr.append(MED(res.x,n)[1])
 
-print(prod_arr)
-plt.scatter([n for n in range(2,9)],prod_arr)
-plt.xlim([1,10])
-plt.ylim([1,10])
-plt.show()
+# print(prod_arr)
+# plt.scatter([n for n in range(2,9)],prod_arr)
+# plt.xlim([1,10])
+# plt.ylim([1,10])
+# plt.show()
 
 
 # prod_arr = []
